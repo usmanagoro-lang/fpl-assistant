@@ -372,6 +372,14 @@ def main():
     open("site/index.html", "w", encoding="utf-8").write(out)
     json.dump(data, open("site/data.json", "w"))
     print("OK", data["team"], data["advice"])
+    mv = lambda t: f"{t['out']['name']}({t['out']['status']}) -> {t['inn']['name']} {t['inn']['team']} £{t['inn']['price']} {t['inn']['own']}% +{t['gain']}"
+    print("SQUAD", [(p["name"], p["pos"], p["status"], round(p["val"], 1)) for p in data["squad"]])
+    print("CAPTAINS", [(p["name"], p["proj"][0]) for p in data["lineup"]["captains"]])
+    print("SINGLES", [mv(t) for t in data["singles"][:6]])
+    print("DIFFS", [mv(t) for t in data["diffs"][:6]])
+    print("DOUBLES", [([mv(m) for m in d["moves"]], d["net"]) for d in data["doubles"][:3]])
+    print("TOPMID", [(p["name"], p["val"]) for p in data["top"]["MID"][:8]])
+    print("TOPFWD", [(p["name"], p["val"]) for p in data["top"]["FWD"][:6]])
 
 
 if __name__ == "__main__":
