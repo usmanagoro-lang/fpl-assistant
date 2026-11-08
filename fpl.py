@@ -449,6 +449,12 @@ def main():
     open("site/index.html", "w", encoding="utf-8").write(out)
     json.dump(data, open("site/data.json", "w"))
     print("OK", data["team"], data["advice"])
+    extra_names = os.environ.get("EXTRA", "Van Hecke,Trafford,E.Le Fée,Araujo,Barry,Evanilson,Kinsky").split(",")
+    ex = [prow(pid) for pid, p in players.items() if p["web_name"] in extra_names]
+    rep = dict(deadlines=[(e["id"], e["deadline_time"]) for e in events if e["id"] in gws],
+               squad=[{k: p[k] for k in ("name","team","pos","price","own","status","news","chance","xmin","fx","proj","val")} for p in data["squad"]],
+               extra=[{k: p[k] for k in ("name","team","pos","price","own","status","news","xmin","fx","proj","val")} for p in ex])
+    print("REPORT " + json.dumps(rep, ensure_ascii=False))
     print("CHIPS_USED", ehist.get("chips"))
     print("GWHIST", [(r["event"], r["points"], r.get("event_transfers"), r.get("points_on_bench")) for r in ehist.get("current", [])])
     print("CHIPDEFS", [(c.get("name"), c.get("start_event"), c.get("stop_event"), c.get("number")) for c in boot.get("chips", [])])
