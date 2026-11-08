@@ -6,6 +6,7 @@ reads your squad and writes a single HTML page to site/index.html.
 import json, math, os, time, datetime as dt, urllib.request, html
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+import predict as PR
 
 BASE = "https://fantasy.premierleague.com/api/"
 TEAM_ID = int(os.environ.get("FPL_TEAM_ID", "4733331"))
@@ -416,6 +417,44 @@ def main():
     def tmove(t):
         return dict(out=prow(t["out"]), inn=prow(t["inn"]), gain=t["gain"], left=t["left"] / 10)
 
+    # ---------- match predictions ----------
+    tids = list(teams)
+    patt, pdfn, plg, phadv = PR.ratings(fixtures, team_xg, tids, next_gw)
+    now = dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    pred_gws = [g for g in range(cur_gw, next_gw + 3) if g >= 1]
+    preds = []
+    for fx in sorted(fixtures, key=lambda x: (x.get("kickoff_time") or "", x["id"])):
+        if fx.get("event") not in pred_gws or fx.get("finished") or fx.get("started"):
+            continue
+        p = PR.predict(fx["team_h"], fx["team_a"], patt, pdfn, plg, phadv)
+        p.pop("matrix")
+        preds.append(dict(id=fx["id"], gw=fx["event"], ko=fx.get("kickoff_time"),
+                          home=teams[fx["team_h"]]["name"], away=teams[fx["team_a"]]["name"],
+                          hs=teams[fx["team_h"]]["short_name"], as_=teams[fx["team_a"]]["short_name"], **p))
+    bt = PR.backtest(fixtures, team_xg, tids, 4, cur_gw)
+    # live record: store each prediction until kick-off, score it once finished
+    hist_path = "history/predictions.json"
+    try:
+        store = json.load(open(hist_path))
+    except Exception:
+        store = {}
+    for p in preds:
+        store[str(p["id"])] = {k: p[k] for k in ("gw", "hs", "as_", "ph", "pd", "pa", "pick", "score")}
+    rec = dict(n=0, hit=0, exact=0)
+    fx_id = {str(fx["id"]): fx for fx in fixtures}
+    recent = []
+    for k, p in store.items():
+        fx = fx_id.get(k)
+        if fx and fx.get("finished") and fx.get("team_h_score") is not None:
+            o = PR.outcome(fx["team_h_score"], fx["team_a_score"])
+            actual = f"{fx['team_h_score']}-{fx['team_a_score']}"
+            rec["n"] += 1; rec["hit"] += p["pick"] == o; rec["exact"] += p["score"] == actual
+            recent.append(dict(p, actual=actual, ok=p["pick"] == o, exactok=p["score"] == actual, ko=fx.get("kickoff_time")))
+    recent.sort(key=lambda r: r.get("ko") or "", reverse=True)
+    os.makedirs("history", exist_ok=True)
+    json.dump(store, open(hist_path, "w"), indent=0)
+    team_tbl = sorted(([teams[t]["name"], round(patt[t], 2), round(pdfn[t], 2)] for t in tids), key=lambda r: -(r[1] / r[2]))
+
     deadline = nxt["deadline_time"] if nxt else None
     data = dict(
         generated=dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
@@ -434,6 +473,7 @@ def main():
                                                     key=lambda i: -V(i))[:20]] for k in POS},
         risers=[prow(p["id"]) for p in risers], fallers=[prow(p["id"]) for p in fallers],
         my_fallers=[prow(p["id"]) for p in fallers if p["id"] in squad_ids],
+        preds=preds, backtest=bt, live=dict(rec, recent=recent[:20]), team_ratings=team_tbl,
         league=None if not league else dict(
             name=league["name"], my_rank=league["my_rank"], size=league["size"], sampled=league["sampled"],
             table=league["table"],
@@ -455,6 +495,10 @@ def main():
                squad=[{k: p[k] for k in ("name","team","pos","price","own","status","news","chance","xmin","fx","proj","val")} for p in data["squad"]],
                extra=[{k: p[k] for k in ("name","team","pos","price","own","status","news","xmin","fx","proj","val")} for p in ex])
     print("REPORT " + json.dumps(rep, ensure_ascii=False))
+    print("BACKTEST", bt)
+    print("LIVE", rec)
+    print("PREDS", [(p["gw"], p["hs"], p["as_"], p["score"], p["ph"], p["pd"], p["pa"], p["xh"], p["xa"]) for p in preds])
+    print("TEAMS", team_tbl)
     print("CHIPS_USED", ehist.get("chips"))
     print("GWHIST", [(r["event"], r["points"], r.get("event_transfers"), r.get("points_on_bench")) for r in ehist.get("current", [])])
     print("CHIPDEFS", [(c.get("name"), c.get("start_event"), c.get("stop_event"), c.get("number")) for c in boot.get("chips", [])])
