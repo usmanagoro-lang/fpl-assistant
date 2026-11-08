@@ -449,6 +449,9 @@ def main():
     open("site/index.html", "w", encoding="utf-8").write(out)
     json.dump(data, open("site/data.json", "w"))
     print("OK", data["team"], data["advice"])
+    print("CHIPS_USED", ehist.get("chips"))
+    print("GWHIST", [(r["event"], r["points"], r.get("event_transfers"), r.get("points_on_bench")) for r in ehist.get("current", [])])
+    print("CHIPDEFS", [(c.get("name"), c.get("start_event"), c.get("stop_event"), c.get("number")) for c in boot.get("chips", [])])
     mv = lambda t: f"{t['out']['name']}({t['out']['status']}) -> {t['inn']['name']} {t['inn']['team']} £{t['inn']['price']} {t['inn']['own']}% +{t['gain']}"
     print("SQUAD", [(p["name"], p["pos"], p["status"], round(p["val"], 1)) for p in data["squad"]])
     print("CAPTAINS", [(p["name"], p["proj"][0]) for p in data["lineup"]["captains"]])
