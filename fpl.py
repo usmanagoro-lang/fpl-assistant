@@ -18,7 +18,7 @@ CS_PTS = {1: 4, 2: 4, 3: 1, 4: 0}
 DC_THRESH = {2: 10, 3: 12, 4: 12}
 PRIOR_XG90 = {1: 0.0, 2: 0.04, 3: 0.12, 4: 0.30}
 PRIOR_XA90 = {1: 0.01, 2: 0.06, 3: 0.12, 4: 0.10}
-PSEUDO_MIN = 270.0
+PSEUDO_MIN = 180.0
 DECAY = 0.85
 
 
@@ -231,19 +231,46 @@ def main():
     def V(pid):
         return model[pid]["val"]
 
+    # ---------- squad scoring: best XI + captain each GW, bench barely counts ----------
+    def xi_points(ids, gw):
+        by = defaultdict(list)
+        for pid in ids:
+            by[players[pid]["element_type"]].append(model[pid]["proj"].get(gw, 0))
+        for k in by:
+            by[k].sort(reverse=True)
+        best = 0.0; best_set = None
+        for d in range(3, 6):
+            for m in range(2, 6):
+                fw = 10 - d - m
+                if fw < 1 or fw > 3 or d > len(by[2]) or m > len(by[3]) or fw > len(by[4]) or not by[1]:
+                    continue
+                xi = by[1][:1] + by[2][:d] + by[3][:m] + by[4][:fw]
+                tot = sum(xi) + max(xi)          # captain doubles
+                if tot > best:
+                    best, best_set = tot, xi
+        total = sum(model[p]["proj"].get(gw, 0) for p in ids)
+        return best + 0.1 * (total - (sum(best_set) if best_set else 0))
+
+    def squad_value(ids):
+        return sum(WEIGHTS[k] * xi_points(ids, g) for k, g in enumerate(gws))
+
+    base_val = squad_value(list(squad_ids))
+    cands = {k: sorted([i for i, p in players.items() if p["element_type"] == k and i not in squad_ids
+                        and p.get("status") not in ("u", "i", "s", "n")], key=lambda i: -V(i))[:45] for k in POS}
+
     # ---------- transfers ----------
     singles = []
     for s in squad:
         o = s["id"]; po = players[o]
         budget = bank + s["sell"]
-        for i, pi in players.items():
-            if i in squad_ids or pi["element_type"] != po["element_type"]:
-                continue
-            if pi["now_cost"] > budget or pi.get("status") in ("u", "i", "s", "n"):
+        for i in cands[po["element_type"]]:
+            pi = players[i]
+            if pi["now_cost"] > budget:
                 continue
             if pi["team"] != po["team"] and team_count[pi["team"]] >= 3:
                 continue
-            g = V(i) - V(o)
+            new_ids = [x for x in squad_ids if x != o] + [i]
+            g = squad_value(new_ids) - base_val
             if g > 0.3:
                 singles.append(dict(out=o, inn=i, gain=round(g, 2),
                                     left=budget - pi["now_cost"]))
@@ -259,7 +286,7 @@ def main():
     show_singles = varied(singles)
 
     doubles = []
-    top = singles[:80]
+    top = singles[:40]
     sell_of = {s["id"]: s["sell"] for s in squad}
     for a in range(len(top)):
         for b in range(a + 1, len(top)):
@@ -280,8 +307,9 @@ def main():
             if not ok:
                 continue
             hit = 0 if ft >= 2 else 4
-            doubles.append(dict(moves=[x, y], gain=round(x["gain"] + y["gain"], 2), hit=hit,
-                                net=round(x["gain"] + y["gain"] - hit, 2)))
+            new_ids = [z for z in squad_ids if z not in (x["out"], y["out"])] + [x["inn"], y["inn"]]
+            g = squad_value(new_ids) - base_val
+            doubles.append(dict(moves=[x, y], gain=round(g, 2), hit=hit, net=round(g - hit, 2)))
     doubles.sort(key=lambda d: -d["net"])
     doubles = doubles[:6]
 
@@ -312,7 +340,7 @@ def main():
     # ---------- headline advice ----------
     best_single = singles[0] if singles else None
     best_double = doubles[0] if doubles else None
-    if best_double and best_double["hit"] and best_single and best_double["net"] > best_single["gain"] + 1.0:
+    if best_double and best_double["hit"] and best_single and best_double["net"] > best_single["gain"] + 2.0:
         advice = ("Take the hit", f"The double move below gains about {best_double['gain']:.1f} pts over {len(gws)} GWs, "
                   f"so it beats the –4 by {best_double['net']:.1f}.")
     elif best_double and not best_double["hit"] and best_single and best_double["gain"] > best_single["gain"] + 1.0:
