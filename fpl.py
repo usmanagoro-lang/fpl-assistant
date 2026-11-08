@@ -232,10 +232,11 @@ def main():
         return model[pid]["val"]
 
     # ---------- squad scoring: best XI + captain each GW, bench barely counts ----------
-    def xi_points(ids, gw):
+    def xi_points(ids, gw, fac=None):
+        pp = lambda p: model[p]["proj"].get(gw, 0) * (fac.get(p, 1.0) if fac else 1.0)
         by = defaultdict(list)
         for pid in ids:
-            by[players[pid]["element_type"]].append(model[pid]["proj"].get(gw, 0))
+            by[players[pid]["element_type"]].append(pp(pid))
         for k in by:
             by[k].sort(reverse=True)
         best = 0.0; best_set = None
@@ -248,11 +249,11 @@ def main():
                 tot = sum(xi) + max(xi)          # captain doubles
                 if tot > best:
                     best, best_set = tot, xi
-        total = sum(model[p]["proj"].get(gw, 0) for p in ids)
+        total = sum(pp(p) for p in ids)
         return best + 0.1 * (total - (sum(best_set) if best_set else 0))
 
-    def squad_value(ids):
-        return sum(WEIGHTS[k] * xi_points(ids, g) for k, g in enumerate(gws))
+    def squad_value(ids, fac=None):
+        return sum(WEIGHTS[k] * xi_points(ids, g, fac) for k, g in enumerate(gws))
 
     base_val = squad_value(list(squad_ids))
     cands = {k: sorted([i for i, p in players.items() if p["element_type"] == k and i not in squad_ids
@@ -312,6 +313,46 @@ def main():
             doubles.append(dict(moves=[x, y], gain=round(g, 2), hit=hit, net=round(g - hit, 2)))
     doubles.sort(key=lambda d: -d["net"])
     doubles = doubles[:6]
+
+
+    # ---------- mini-league (rival-aware) ----------
+    league = None
+    want = os.environ.get("FPL_LEAGUE", "fanto").lower()
+    lg_entry = next((l for l in entry.get("leagues", {}).get("classic", []) if want in l.get("name", "").lower()), None)
+    if lg_entry:
+        st = get(f"leagues-classic/{lg_entry['id']}/standings/")["standings"]["results"][:50]
+        rivals = [r for r in st if r["entry"] != TEAM_ID]
+        own_cnt, cap_cnt = defaultdict(int), defaultdict(int)
+        n = 0
+        for r in rivals:
+            try:
+                rp = get(f"entry/{r['entry']}/event/{pick_gw}/picks/")["picks"]
+            except Exception:
+                continue
+            n += 1
+            for pk in rp:
+                if pk.get("multiplier", 1) > 0 and pk["position"] <= 11:
+                    own_cnt[pk["element"]] += 1
+                if pk.get("is_captain"):
+                    cap_cnt[pk["element"]] += 1
+        n = max(n, 1)
+        lo = {pid: own_cnt[pid] / n for pid in players}
+        # expected gain is the same vs rivals; what climbs a mini-league is unshared upside
+        rel = []
+        for t in singles[:60] + diffs[:30]:
+            up = 0.25 * V(t["inn"]) * (1 - lo[t["inn"]])
+            rel.append(dict(t, lgain=round(t["gain"] + up, 2)))
+        seen = set(); rel_u = []
+        for t in sorted(rel, key=lambda t: -t["lgain"]):
+            if (t["out"], t["inn"]) not in seen:
+                seen.add((t["out"], t["inn"])); rel_u.append(t)
+        me = next((r for r in st if r["entry"] == TEAM_ID), None)
+        threats = sorted([p for p in players if lo[p] >= 0.3 and p not in squad_ids], key=lambda p: -lo[p] * V(p))[:8]
+        league = dict(name=lg_entry["name"], my_rank=me["rank"] if me else None, size=len(st), sampled=n,
+                      table=[dict(rank=r["rank"], team=r["entry_name"], mgr=r["player_name"], total=r["total"],
+                                  gw=r["event_total"], me=r["entry"] == TEAM_ID) for r in st[:20]],
+                      rel=rel_u[:10], threats=threats, lo=lo,
+                      caps=sorted(cap_cnt.items(), key=lambda x: -x[1])[:6])
 
     # ---------- best XI + captain for next GW ----------
     g0 = gws[0] if gws else None
@@ -393,6 +434,14 @@ def main():
                                                     key=lambda i: -V(i))[:20]] for k in POS},
         risers=[prow(p["id"]) for p in risers], fallers=[prow(p["id"]) for p in fallers],
         my_fallers=[prow(p["id"]) for p in fallers if p["id"] in squad_ids],
+        league=None if not league else dict(
+            name=league["name"], my_rank=league["my_rank"], size=league["size"], sampled=league["sampled"],
+            table=league["table"],
+            moves=[dict(tmove(t), lgain=t["lgain"], lo_in=round(100 * league["lo"][t["inn"]]),
+                        lo_out=round(100 * league["lo"][t["out"]])) for t in league["rel"]],
+            threats=[prow(p, dict(lo=round(100 * league["lo"][p]))) for p in league["threats"]],
+            mine=[prow(s["id"], dict(lo=round(100 * league["lo"][s["id"]]))) for s in squad],
+            caps=[dict(prow(p), share=c) for p, c in league["caps"]]),
     )
     os.makedirs("site", exist_ok=True)
     tpl = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "template.html"), encoding="utf-8").read()
@@ -406,6 +455,17 @@ def main():
     print("SINGLES", [mv(t) for t in data["singles"][:6]])
     print("DIFFS", [mv(t) for t in data["diffs"][:6]])
     print("DOUBLES", [([mv(m) for m in d["moves"]], d["net"]) for d in data["doubles"][:3]])
+    L = data["league"]
+    if L:
+        print("LEAGUE", L["name"], "rank", L["my_rank"], "of", L["size"], "sampled", L["sampled"])
+        print("TABLE", [(r["rank"], r["team"], r["total"], r["gw"]) for r in L["table"][:12]])
+        print("LMOVES", [mv(t) + f" lg+{t['lgain']} (in {t['lo_in']}%/out {t['lo_out']}% of rivals)" for t in L["moves"][:8]])
+        print("THREATS", [(p["name"], p["team"], p["price"], p["lo"], p["val"]) for p in L["threats"]])
+        print("MINE_LO", [(p["name"], p["lo"]) for p in L["mine"]])
+        print("RIVALCAPS", [(c["name"], c["share"]) for c in L["caps"]])
+    else:
+        print("LEAGUE none; leagues:", [l["name"] for l in entry.get("leagues", {}).get("classic", [])])
+    print("SQUADFX", [(p["name"], p["fx"], p["proj"]) for p in data["squad"]])
     print("TOPMID", [(p["name"], p["val"]) for p in data["top"]["MID"][:8]])
     print("TOPFWD", [(p["name"], p["val"]) for p in data["top"]["FWD"][:6]])
 
