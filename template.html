@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FPL Assistant</title>
+<style>
+:root{--bg:#160a1f;--card:#22102f;--line:#3a2250;--txt:#f3eef7;--mut:#a993bd;--acc:#00ff87;--acc2:#04f5ff;--bad:#ff4d6d;--warn:#ffb020}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 10px}.mut{color:var(--mut);font-size:13px}
+header{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:flex-end;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}.stat b{display:block;font-size:20px}
+.hero{background:linear-gradient(120deg,#37003c,#4b1a7a);border:1px solid var(--acc);border-radius:14px;padding:16px;margin-bottom:14px}
+.hero .tag{color:var(--acc);font-weight:700;text-transform:uppercase;font-size:12px;letter-spacing:.06em}
+.hero h2{font-size:22px;margin:4px 0}
+nav{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;position:sticky;top:0;background:var(--bg);padding:6px 0;z-index:5}
+nav button{background:var(--card);border:1px solid var(--line);color:var(--txt);padding:8px 14px;border-radius:999px;font-size:14px;cursor:pointer;white-space:nowrap}
+nav button.on{background:var(--acc);color:#1a0a24;border-color:var(--acc);font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+.move{display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.move:first-of-type{border-top:0}.arrow{color:var(--mut)}.gain{font-weight:700;color:var(--acc);text-align:right;min-width:54px}
+.pl b{display:block}.pl span{color:var(--mut);font-size:12px}
+.badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:6px;margin-left:4px;vertical-align:1px}
+.diff{background:#04f5ff22;color:var(--acc2)}.inj{background:#ff4d6d22;color:var(--bad)}.dbt{background:#ffb02022;color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:6px 5px;text-align:right;border-top:1px solid var(--line);white-space:nowrap}
+th{color:var(--mut);font-weight:600;border-top:0}td:first-child,th:first-child{text-align:left}
+.scroll{overflow-x:auto}.xi{color:var(--acc)}.bench{opacity:.65}
+.cell{border-radius:5px;padding:2px 4px}
+.caps{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.cap{background:#ffffff08;border-radius:10px;padding:10px}.cap b{font-size:16px}.cap .n{color:var(--acc);font-size:22px;font-weight:800}
+.seg{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}.seg button{background:none;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:4px 10px;cursor:pointer}
+.seg button.on{border-color:var(--acc);color:var(--acc)}
+.note{font-size:12px;color:var(--mut);margin-top:6px}
+footer{color:var(--mut);font-size:12px;margin:20px 0 40px}
+@media(max-width:560px){.move{grid-template-columns:1fr auto 1fr;}.move .gain{grid-column:1/-1;text-align:left}}
+</style>
+</head>
+<body><div class="wrap" id="app"></div>
+<script>
+const D=/*__DATA__*/null;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=n=>n==null?"—":Number(n).toLocaleString("en-IE");
+function heat(v){const a=Math.max(0,Math.min(1,(v-1)/6));return `background:rgba(0,255,135,${(a*0.55).toFixed(2)})`}
+function flag(p){let b="";if(p.status!=="a"){const c=p.chance;b+=`<span class="badge ${c===null||c===0?"inj":"dbt"}" title="${esc(p.news)}">${c==null?"OUT":c+"%"}</span>`}
+ if(p.own<10)b+=`<span class="badge diff">${p.own}%</span>`;return b}
+function pl(p){return `<div class="pl"><b>${esc(p.name)}${flag(p)}</b><span>${p.team} · ${p.pos} · £${p.price.toFixed(1)}m · ${p.own}% owned</span></div>`}
+function moves(list,empty){if(!list.length)return `<p class="mut">${empty}</p>`;
+ return list.map(t=>`<div class="move">${pl(t.out)}<div class="arrow">→</div>${pl(t.inn)}<div class="gain">+${t.gain.toFixed(1)}</div></div>`).join("")}
+function ptable(rows,opts={}){const g=D.gws;
+ return `<div class="scroll"><table><tr><th>Player</th><th>£</th><th>Own%</th><th>Mins</th>${g.map((x,i)=>`<th title="${esc(rows[0]?.fx?.[i]||"")}">GW${x}</th>`).join("")}<th>Score</th>${opts.sell?"<th>Sell</th>":""}</tr>`+
+ rows.map(p=>`<tr class="${opts.sell?(p.xi?"":"bench"):""}"><td>${opts.sell&&p.xi?'<span class="xi">●</span> ':""}${esc(p.name)} <span class="mut">${p.team}</span>${flag(p)}</td><td>${p.price.toFixed(1)}</td><td>${p.own}</td><td>${p.xmin}</td>`+
+ p.proj.map((v,i)=>`<td><span class="cell" style="${heat(v)}" title="${esc(p.fx[i])}">${v.toFixed(1)}</span></td>`).join("")+`<td><b>${p.val.toFixed(1)}</b></td>${opts.sell?`<td>${p.sell.toFixed(1)}</td>`:""}</tr>`).join("")+`</table></div>`}
+let tab="moves",pos="MID";
+function render(){const t=D.team;const dl=D.deadline?new Date(D.deadline).toLocaleString("en-IE",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
+ let h=`<header><div><h1>${esc(t.name)}</h1><div class="mut">FPL Assistant · GW${D.next_gw} deadline ${dl}</div></div><div class="mut">Updated ${D.generated}</div></header>
+ <div class="stats"><div class="stat"><span class="mut">Overall rank</span><b>${fmt(t.rank)}</b></div><div class="stat"><span class="mut">Points</span><b>${fmt(t.points)}</b></div>
+ <div class="stat"><span class="mut">Bank</span><b>£${t.bank.toFixed(1)}m</b></div><div class="stat"><span class="mut">Free transfers</span><b>${t.ft}</b></div><div class="stat"><span class="mut">Team value</span><b>£${t.value.toFixed(1)}m</b></div></div>
+ <div class="hero"><div class="tag">This week</div><h2>${esc(D.advice[0])}</h2><div>${esc(D.advice[1])}</div></div>
+ <nav>${[["moves","Transfers"],["team","My team"],["players","Top players"],["prices","Price watch"]].map(([k,l])=>`<button class="${tab===k?"on":""}" onclick="tab='${k}';render()">${l}</button>`).join("")}</nav>`;
+ if(tab==="moves"){
+  h+=`<div class="card"><h2>🎲 Differential picks (under 10% owned)</h2><div class="mut">Players most managers don't own. This is where you climb ranks.</div>${moves(D.diffs,"No differential upgrades this week.")}</div>
+  <div class="card"><h2>Best single transfers</h2><div class="mut">Points gained over the next ${D.gws.length} GWs (near weeks count more), after budget and 3-per-club rules.</div>${moves(D.singles,"Nothing beats your current players.")}</div>
+  <div class="card"><h2>Double moves</h2>${D.doubles.length?D.doubles.map(d=>`<div style="padding:8px 0;border-top:1px solid var(--line)">${d.moves.map(m=>`<div class="move">${pl(m.out)}<div class="arrow">→</div>${pl(m.inn)}<div class="gain">+${m.gain.toFixed(1)}</div></div>`).join("")}
+   <div class="mut">Total +${d.gain.toFixed(1)}${d.hit?` − 4 hit = <b style="color:${d.net>0?"var(--acc)":"var(--bad)"}">${d.net>0?"+":""}${d.net.toFixed(1)}</b>`:" (no hit)"}</div></div>`).join(""):'<p class="mut">No valid pairs.</p>'}</div>`}
+ if(tab==="team"){const L=D.lineup;
+  h+=`<div class="card"><h2>Captain for GW${D.next_gw}</h2><div class="caps">${L.captains.map((p,i)=>`<div class="cap"><div class="mut">${i===0?"Captain":i===1?"Vice":"Option"}</div><b>${esc(p.name)}</b>${flag(p)}<div class="n">${p.proj[0].toFixed(1)}</div><div class="mut">${esc(p.fx[0])} · ${p.own}% owned</div></div>`).join("")}</div>
+  <div class="note">Risk play: a low-owned captain who blanks hurts less, and one who hauls gains you a lot of rank.</div></div>
+  <div class="card"><h2>Your squad</h2><div class="mut">● = suggested starting XI. Bench order: ${L.bench.map(p=>esc(p.name)).join(", ")}</div>${ptable(D.squad.slice().sort((a,b)=>b.xi-a.xi||["GK","DEF","MID","FWD"].indexOf(a.pos)-["GK","DEF","MID","FWD"].indexOf(b.pos)),{sell:true})}</div>`}
+ if(tab==="players"){
+  h+=`<div class="card"><div class="seg">${["GK","DEF","MID","FWD"].map(k=>`<button class="${pos===k?"on":""}" onclick="pos='${k}';render()">${k}</button>`).join("")}</div>
+  <h2>Top 20 ${pos} by projected points</h2>${ptable(D.top[pos])}<div class="note">Hover/tap a number to see the fixture. Mins = expected minutes from recent games.</div></div>`}
+ if(tab==="prices"){
+  const pr=(l)=>`<div class="scroll"><table><tr><th>Player</th><th>£</th><th>Own%</th><th>Net transfers this GW</th></tr>${l.map(p=>`<tr><td>${esc(p.name)} <span class="mut">${p.team}</span></td><td>${p.price.toFixed(1)}</td><td>${p.own}</td><td style="color:${p.netx>0?"var(--acc)":"var(--bad)"}">${p.netx>0?"+":""}${fmt(p.netx)}</td></tr>`).join("")}</table></div>`;
+  h+=(D.my_fallers.length?`<div class="card" style="border-color:var(--bad)"><h2>⚠️ Your players being sold heavily</h2>${pr(D.my_fallers)}</div>`:"")+
+  `<div class="card"><h2>Likely risers</h2><div class="mut">Most net transfers in. Buy before they rise.</div>${pr(D.risers)}</div><div class="card"><h2>Likely fallers</h2>${pr(D.fallers)}</div>`}
+ h+=`<footer>Projections use recent expected goals and assists (xG/xA), minutes, team attack/defence strength from xG, clean-sheet odds, bonus and defensive contributions. Free transfers are estimated. It's a guide, not a guarantee. Always check team news before the deadline.</footer>`;
+ $("#app").innerHTML=h}
+render();
+</script>
+</body></html>
