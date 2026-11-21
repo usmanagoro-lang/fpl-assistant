@@ -490,7 +490,7 @@ def main():
     open("site/index.html", "w", encoding="utf-8").write(out)
     json.dump(data, open("site/data.json", "w"))
     print("OK", data["team"], data["advice"])
-    extra_names = [x.lower() for x in os.environ.get("EXTRA", "Van Hecke,Trafford,Le Fée,Araujo,Barry,Evanilson,Kinsky,Hill,Lacey,Dorgu,Cunha,Fernandes").split(",")]
+    extra_names = [x.lower() for x in os.environ.get("EXTRA", "Van Hecke,Trafford,Le Fée,Araujo,Barry,Evanilson,Kinsky,Hill,Lacey,Dorgu,Cunha,Fernandes,Ødegaard,McAtee,Mbeumo,Rudoni,Yeremy,Manzambi,Kudus,Semenyo,Saka,Palmer,Gordon").split(",")]
     ex = [prow(pid) for pid, p in players.items() if any(n in p["web_name"].lower() for n in extra_names)]
     rep = dict(deadlines=[(e["id"], e["deadline_time"]) for e in events if e["id"] in gws],
                squad=[{k: p[k] for k in ("name","team","pos","price","own","status","news","chance","xmin","fx","proj","val","pts","form","xg90","xa90")} for p in data["squad"]],
