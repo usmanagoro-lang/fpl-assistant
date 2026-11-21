@@ -499,6 +499,17 @@ def main():
     print("LIVE", rec)
     print("PREDS", [(p["gw"], p["hs"], p["as_"], p["score"], p["ph"], p["pd"], p["pa"], p["xh"], p["xa"]) for p in preds])
     print("TEAMS", team_tbl)
+    try:
+        lgw = cur_gw
+        live = {e["id"]: e["stats"] for e in get(f"event/{lgw}/live/")["elements"]}
+        lp = get(f"entry/{TEAM_ID}/event/{lgw}/picks/")
+        out = []
+        for pk in lp["picks"]:
+            st = live.get(pk["element"], {})
+            out.append((players[pk["element"]]["web_name"], pk["position"], pk["multiplier"], st.get("total_points"), st.get("minutes"), st.get("goals_scored"), st.get("assists"), st.get("clean_sheets"), st.get("bonus")))
+        print("LIVEPTS", lgw, lp.get("entry_history", {}).get("points"), lp.get("active_chip"), out)
+    except Exception as e:
+        print("LIVEPTS error", e)
     print("CHIPS_USED", ehist.get("chips"))
     print("GWHIST", [(r["event"], r["points"], r.get("event_transfers"), r.get("points_on_bench")) for r in ehist.get("current", [])])
     print("CHIPDEFS", [(c.get("name"), c.get("start_event"), c.get("stop_event"), c.get("number")) for c in boot.get("chips", [])])
