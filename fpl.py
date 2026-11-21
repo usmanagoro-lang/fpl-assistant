@@ -66,9 +66,10 @@ def main():
             return pid, get(f"element-summary/{pid}/")["history"]
         except Exception:
             return pid, []
+    done_fx = {fx["id"] for fx in fixtures if fx.get("finished") or fx.get("finished_provisional")}
     with ThreadPoolExecutor(max_workers=8) as ex:
         for pid, h in ex.map(load, ids):
-            hist[pid] = h
+            hist[pid] = [r for r in h if r.get("fixture") in done_fx]   # ignore games not yet played
 
     # ---------- team attack / defence ratings from xG ----------
     fx_by_id = {fx["id"]: fx for fx in fixtures}
