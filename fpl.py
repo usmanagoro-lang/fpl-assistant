@@ -490,11 +490,11 @@ def main():
     open("site/index.html", "w", encoding="utf-8").write(out)
     json.dump(data, open("site/data.json", "w"))
     print("OK", data["team"], data["advice"])
-    extra_names = os.environ.get("EXTRA", "Van Hecke,Trafford,E.Le Fée,Araujo,Barry,Evanilson,Kinsky").split(",")
-    ex = [prow(pid) for pid, p in players.items() if p["web_name"] in extra_names]
+    extra_names = [x.lower() for x in os.environ.get("EXTRA", "Van Hecke,Trafford,Le Fée,Araujo,Barry,Evanilson,Kinsky,Hill,Lacey,Dorgu,Cunha,Fernandes").split(",")]
+    ex = [prow(pid) for pid, p in players.items() if any(n in p["web_name"].lower() for n in extra_names)]
     rep = dict(deadlines=[(e["id"], e["deadline_time"]) for e in events if e["id"] in gws],
-               squad=[{k: p[k] for k in ("name","team","pos","price","own","status","news","chance","xmin","fx","proj","val")} for p in data["squad"]],
-               extra=[{k: p[k] for k in ("name","team","pos","price","own","status","news","xmin","fx","proj","val")} for p in ex])
+               squad=[{k: p[k] for k in ("name","team","pos","price","own","status","news","chance","xmin","fx","proj","val","pts","form","xg90","xa90")} for p in data["squad"]],
+               extra=[{k: p[k] for k in ("name","team","pos","price","own","status","news","xmin","fx","proj","val","pts","form","xg90","xa90")} for p in ex])
     print("REPORT " + json.dumps(rep, ensure_ascii=False))
     print("BACKTEST", bt)
     print("LIVE", rec)
