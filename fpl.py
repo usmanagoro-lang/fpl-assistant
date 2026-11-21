@@ -511,6 +511,14 @@ def main():
         print("LIVEPTS", lgw, lp.get("entry_history", {}).get("points"), lp.get("active_chip"), out)
     except Exception as e:
         print("LIVEPTS error", e)
+    for nmw in os.environ.get("DETAIL", "Rudoni,E.Le Fée,Manzambi,McAtee").split(","):
+        pid = next((i for i, p in players.items() if p["web_name"] == nmw), None)
+        if not pid:
+            continue
+        es = get(f"element-summary/{pid}/")
+        hrows = [(r["round"], teams[r["opponent_team"]]["short_name"] + ("H" if r["was_home"] else "A"), r["minutes"], r["total_points"], r["goals_scored"], r["assists"], round(f(r.get("expected_goals")) + f(r.get("expected_assists")), 2)) for r in es["history"]]
+        frows = [(x["event"], teams[x["team_a"] if x["is_home"] else x["team_h"]]["short_name"] + ("H" if x["is_home"] else "A"), x["difficulty"]) for x in es["fixtures"][:10]]
+        print("DETAIL", nmw, hrows, "NEXT", frows)
     print("CHIPS_USED", ehist.get("chips"))
     print("GWHIST", [(r["event"], r["points"], r.get("event_transfers"), r.get("points_on_bench")) for r in ehist.get("current", [])])
     print("CHIPDEFS", [(c.get("name"), c.get("start_event"), c.get("stop_event"), c.get("number")) for c in boot.get("chips", [])])
