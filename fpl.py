@@ -519,6 +519,32 @@ def main():
         hrows = [(r["round"], teams[r["opponent_team"]]["short_name"] + ("H" if r["was_home"] else "A"), r["minutes"], r["total_points"], r["goals_scored"], r["assists"], round(f(r.get("expected_goals")) + f(r.get("expected_assists")), 2)) for r in es["history"]]
         frows = [(x["event"], teams[x["team_a"] if x["is_home"] else x["team_h"]]["short_name"] + ("H" if x["is_home"] else "A"), x["difficulty"]) for x in es["fixtures"][:10]]
         print("DETAIL", nmw, hrows, "NEXT", frows)
+    # team form over last 5 finished league games
+    tform = {}
+    for t in teams:
+        games = sorted([fx for fx in fixtures if fx.get("finished") and t in (fx["team_h"], fx["team_a"])], key=lambda x: x["event"])[-5:]
+        pts = gf = ga = xf = xa_ = 0
+        res = ""
+        for fx in games:
+            home = fx["team_h"] == t
+            a_, b_ = (fx["team_h_score"], fx["team_a_score"]) if home else (fx["team_a_score"], fx["team_h_score"])
+            o = fx["team_a"] if home else fx["team_h"]
+            gf += a_; ga += b_
+            xf += team_xg.get((fx["id"], t), 0); xa_ += team_xg.get((fx["id"], o), 0)
+            res += "W" if a_ > b_ else "D" if a_ == b_ else "L"
+            pts += 3 if a_ > b_ else 1 if a_ == b_ else 0
+        tform[t] = dict(team=teams[t]["short_name"], res=res, pts=pts, gf=gf, ga=ga, xgf=round(xf, 1), xga=round(xa_, 1))
+    ranked = sorted(tform.values(), key=lambda d: (-d["pts"], -(d["xgf"] - d["xga"])))
+    print("TEAMFORM", [(d["team"], d["res"], d["pts"], f"{d['gf']}-{d['ga']}", f"xG {d['xgf']}-{d['xga']}") for d in ranked])
+    fdr = defaultdict(list)
+    for fx in fixtures:
+        if fx.get("event") and next_gw + 1 <= fx["event"] <= next_gw + 7:
+            fdr[fx["team_h"]].append((fx["event"], teams[fx["team_a"]]["short_name"] + "H", fx["team_h_difficulty"]))
+            fdr[fx["team_a"]].append((fx["event"], teams[fx["team_h"]]["short_name"] + "A", fx["team_a_difficulty"]))
+    top_ids = [t for t in teams if tform[t]["team"] in [d["team"] for d in ranked[:7]]]
+    for t in top_ids:
+        best = sorted([i for i, p in players.items() if p["team"] == t and model[i]["xmin"] >= 60 and p.get("status") == "a"], key=lambda i: -V(i))[:5]
+        print("FORMPICKS", tform[t]["team"], sorted(fdr[t]), [(players[i]["web_name"], POS[players[i]["element_type"]], players[i]["now_cost"] / 10, players[i]["selected_by_percent"], players[i]["total_points"], players[i]["form"], model[i]["xmin"], round(V(i), 1)) for i in best])
     print("CHIPS_USED", ehist.get("chips"))
     print("GWHIST", [(r["event"], r["points"], r.get("event_transfers"), r.get("points_on_bench")) for r in ehist.get("current", [])])
     print("CHIPDEFS", [(c.get("name"), c.get("start_event"), c.get("stop_event"), c.get("number")) for c in boot.get("chips", [])])
