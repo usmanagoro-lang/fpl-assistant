@@ -511,7 +511,7 @@ def main():
         print("LIVEPTS", lgw, lp.get("entry_history", {}).get("points"), lp.get("active_chip"), out)
     except Exception as e:
         print("LIVEPTS error", e)
-    for nmw in os.environ.get("DETAIL", "Rudoni,E.Le Fée,Manzambi,McAtee").split(","):
+    for nmw in os.environ.get("DETAIL", "Raya,Rudoni,Trafford,Verbruggen").split(","):
         pid = next((i for i, p in players.items() if p["web_name"] == nmw), None)
         if not pid:
             continue
